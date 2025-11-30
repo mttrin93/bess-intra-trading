@@ -60,8 +60,8 @@ This package formalizes and extends the theory presented in [1], offering a clea
 2. Download the `bess_intra_trading` repository:
 
 ```bash
-git clone https://github.com/mttrin93/pypolaron.git
-cd pypolaron
+git clone https://github.com/mttrin93/bess-intra-trading.git
+cd bess_intra_trading
 ```
 
 3. Run installation script:
