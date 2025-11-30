@@ -1,6 +1,6 @@
 # 🔋 BESS-INTRA-TRADING: Rolling Intrinsic Optimization for Intraday BESS Trading
 
-`bess_intra_trading` is a specialized **Python library** that provides a robust, modular implementation of the 
+`bess-intra-trading` is a specialized **Python library** that provides a robust, modular implementation of the 
 **Rolling Intrinsic (RI) optimization strategy** for Battery Energy Storage System (BESS) **intraday energy arbitrage**.
 
 This package formalizes and extends the theory presented in [1], offering a clean, object-oriented framework designed for:
@@ -57,7 +57,7 @@ This package formalizes and extends the theory presented in [1], offering a clea
 
 `conda create -n bess_intra_trading`
 
-2. Download the `bess_intra_trading` repository:
+2. Download the `bess-intra-trading` repository:
 
 ```bash
 git clone https://github.com/mttrin93/bess-intra-trading.git
@@ -73,7 +73,7 @@ to install the package via `pip`. Alternatively, run the command:
 `pip install .[dev]`
 
 to install the package and tests used for development. 
-Now, the `run_generator`, `run_attractor` and `run_pbeu_plus_hybrid` scripts can be used to run the polaron workflows.
+Now, the `create_data`,  scripts can be used to run the trading workflow.
 
 **Script overview:**
 
@@ -205,7 +205,7 @@ updating documentation for non-trivial changes.
 
 ## Citation
 
-If you use `bess_intra_trading` in published work, please cite the repository.
+If you use `bess-intra-trading` in published work, please cite the repository.
 
 ## License
 
