@@ -35,7 +35,7 @@ where = ["src"]
 include = ["bess_intra_trading", "bess_intra_trading.*"]
 
 [project.scripts]
-run_generator = "bess_intra_trading.bin.run_generator:main"
+run_generator = "bess_intra_trading.bin.create_data:main"
 #run_attractor = "pypolaron.bin.run_attractor:main"
 #run_pbeu_plus_hybrid = "pypolaron.bin.run_pbeu_plus_hybrid:main"
 
