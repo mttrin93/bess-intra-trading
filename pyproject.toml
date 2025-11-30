@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bess-intra-trading"
+authors = [{name = "Matteo Rinaldi", email = "rinaldim1993@gmail.com"}]
+description = "A clean implementation of the Rolling Intrinsic BESS Intraday Trading strategy."
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+license-files = ["LICENSE.md"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent"
+]
+dependencies = [
+    "sqlalchemy",
+    "psycopg2-binary",
+    "pandas",
+    "numpy",
+    "pulp",
+    "jupyter",
+    "matplotlib",
+    "loguru",
+]
+dynamic = ["version"]
+keywords = ["bess", "energy", "trading", "intraday", "optimization"]
+
+[tool.setuptools.dynamic]
+version = {attr = "bess_intra_trading.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["bess_intra_trading", "bess_intra_trading.*"]
+
+[project.scripts]
+run_generator = "bess_intra_trading.bin.run_generator:main"
+#run_attractor = "pypolaron.bin.run_attractor:main"
+#run_pbeu_plus_hybrid = "pypolaron.bin.run_pbeu_plus_hybrid:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "pytest-cov",
+  "black",
+  "flake8"
+]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-q --color=yes --disable-warnings"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+# register any custom markers to avoid pytest warnings:
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+]
