@@ -3,3 +3,4 @@ outputs/
 bess_intra_trading.egg-info
 __pycache__/
 .pytest_cache
+build
