@@ -7,6 +7,7 @@ from bess_intra_trading.data import (
     load_external_data
 )
 
+
 def main(args=None):
     if args is None:
         args = sys.argv[1:]
@@ -48,10 +49,12 @@ def main(args=None):
 
     # --- Data Generation/Loading Arguments ---
     group = parser.add_mutually_exclusive_group(required=True)
+
     group.add_argument(
         '--num-rows', type=int,
         help='Number of fake transactions to generate (e.g., 1000000).'
     )
+
     group.add_argument(
         '--file-path', type=str,
         help='Path to an external data file (e.g., CSV) to load instead of generating fake data.'
@@ -83,6 +86,7 @@ def main(args=None):
 
     except Exception as e:
         print(f"\nAn unhandled error occurred during execution: {e}")
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])
