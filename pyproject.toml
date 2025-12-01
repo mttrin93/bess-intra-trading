@@ -36,8 +36,7 @@ include = ["bess_intra_trading", "bess_intra_trading.*"]
 
 [project.scripts]
 create_data = "bess_intra_trading.bin.create_data:main"
-#run_attractor = "pypolaron.bin.run_attractor:main"
-#run_pbeu_plus_hybrid = "pypolaron.bin.run_pbeu_plus_hybrid:main"
+run_optimization = "bess_intra_trading.bin.run_optimization:main"
 
 [project.optional-dependencies]
 dev = [

@@ -1,7 +1,7 @@
-import argparse
 import random
 from datetime import datetime, timedelta
 from psycopg2.extensions import cursor
+import pandas as pd
 
 import pytz
 import psycopg2
@@ -130,10 +130,7 @@ def load_external_data(cur: cursor, file_path: str):
     """
     print(f"Loading data from external file: {file_path}...")
 
-    # In a real scenario, you would use pandas or the 'COPY' command for fast loading:
-    # Example using a CSV:
-    # import pandas as pd
-    # df = pd.read_csv(file_path)
+    profits = pd.read_csv(file_path)
     # # Preprocess and insert data...
 
     # For now, we print a confirmation and skip actual insertion
