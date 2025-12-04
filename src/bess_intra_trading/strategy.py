@@ -54,17 +54,25 @@ class RollingIntrinsicStrategy:
             days_left = (end_date - current_day).days
 
             while execution_time_end < trading_end:
-                volume_weighted_average_price_buy = get_average_prices(
+                volume_weighted_average_price_sell = get_average_prices(
                     conn=conn,
                     side='SELL',
                     execution_time_start=execution_time_start,
                     execution_time_end=execution_time_end,
                     target_delivery_date=trading_end
                 )
-                # print(volume_weighted_average_price_buy)
 
-                break
-                # execution_time_end = execution_time_end + pd.Timedelta(minutes=self.dt)
+                volume_weighted_average_price_buy = get_average_prices(
+                    conn=conn,
+                    side='BUY',
+                    execution_time_start=execution_time_start,
+                    execution_time_end=execution_time_end,
+                    target_delivery_date=trading_end
+                )
+
+                # break
+                execution_time_start = execution_time_end
+                execution_time_end = execution_time_end + pd.Timedelta(minutes=self.dt)
 
 
         # # Iterate over all possible decision points (index of market_data)

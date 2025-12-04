@@ -248,9 +248,13 @@ def get_average_prices(
 
     # set index to product
     df.set_index("product", inplace=True)
-    print(df)
 
     # set index to be all 15 minute intervals from start_of_day to end_of_day, filling missing values with NaN
+    df.index = pd.DatetimeIndex(df.index)
+
+    # Remove timezone if present
+    if df.index.tz is not None:
+        df.index = df.index.tz_localize(None)
     df = df.reindex(pd.date_range(start_of_day, end_of_day, freq="60min"))
 
     return df
