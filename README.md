@@ -65,22 +65,14 @@ to install the package via `pip`. Alternatively, run the command:
 `pip install .[dev]`
 
 to install the package and tests used for development. 
-Now, the `create_data`,  scripts can be used to run the trading workflow.
+Now, the `create_data` and `run_optimization` scripts can be used to run the trading workflow.
 
 **Script overview:**
 
 * `create_data` — set up the PostgreSQL database and either create randomized transaction data or use actual EPEX Spot 
 data (if available)
 
-[//]: # (* `run_attractor` — generates DFT input files and submission scripts, and optionally submits polaron relaxation)
-
-[//]: # (jobs using the electron attractor method [3])
-
-[//]: # ()
-[//]: # ()
-[//]: # (* `run_pbeu_plus_hybrid` — generates DFT input files and submission scripts, and optionally submits polaron relaxation)
-
-[//]: # (jobs performing a combination of DFT+U and hybrid-functional relaxations.)
+* `run_optimization` — run the Rolling Intrinsic algorithm with the previously created data
 
 ## Literature
 
@@ -106,17 +98,15 @@ A common example command for dataset creation, would be:
 create_data --num-rows 10000 
  ```
 
-[//]: # ()
-[//]: # (where the calculation is automatically submitted to the SLURM cluster.)
+The `run_optimization` executables can be run with the following options:
 
-[//]: # ()
-[//]: # (The `run_attractor` executable can be run with the following additional options:)
-
-[//]: # ()
-[//]: # (* `-ae, --attractor-elements`: Element symbol used to substitute the host atom to create the )
-
-[//]: # (localized potential well.)
-
+* `--start-date`: Start date for simulation (YYYY-MM-DD).
+* `--end-date`: End date for simulation (YYYY-MM-DD).
+* `--capacity`: BESS capacity in MWh.
+* `--efficiency`: BESS roundtrip efficiency (0 to 1).
+* `--power`: Maximum charge/discharge power in MWh.
+* `--init-soc`: Initial State of Charge in MWh.
+* `--db-name`: PostgreSQL database name.
 
 ## Development & testing
 
