@@ -80,9 +80,6 @@ def main():
     try:
         with connect_db(db_config) as conn:
 
-            df = pd.read_sql("SELECT * FROM transactions_intraday_de;", conn)
-            print(df)
-
             # Run Simulation
             print("\n--- Starting Rolling Intrinsic Simulation ---")
             strategy.simulate(

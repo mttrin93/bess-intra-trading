@@ -1,5 +1,5 @@
 import pandas as pd
-from bess_intra_trading.data import get_average_prices
+from bess_intra_trading.utils import get_average_prices
 from psycopg2.extensions import connection as PgConnection
 
 
