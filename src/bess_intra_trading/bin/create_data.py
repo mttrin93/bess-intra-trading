@@ -78,7 +78,7 @@ def main(args=None):
                 setup_table(cur)
 
                 if args_parse.num_rows is not None:
-                    generate_and_insert_fake_transactions(cur, args_parse.num_rows)
+                    generate_and_insert_fake_transactions(cur, conn, args_parse.num_rows)
                 elif args_parse.file_path is not None:
                     load_external_data(cur, args_parse.file_path)
 

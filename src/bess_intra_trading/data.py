@@ -1,11 +1,14 @@
 import random
 from datetime import datetime, timedelta
 from psycopg2.extensions import cursor
+from psycopg2.extensions import connection as PgConnection
 import pandas as pd
+import numpy as np
 
 import pytz
 import psycopg2
 from psycopg2 import sql
+from sqlalchemy import create_engine
 
 # --- 1. CONFIGURATION (Moved to default arguments or environment variables) ---
 
@@ -24,8 +27,10 @@ def round_to_full_hour(dt: datetime) -> datetime:
 
 def random_time_in_2022() -> datetime:
     """Generates a random timezone-aware timestamp in 2022, rounded to the nearest full hour."""
+    # TODO: fix this hard-coded implementation
     start = BERLIN_TZ.localize(datetime(2022, 1, 1))
-    end = BERLIN_TZ.localize(datetime(2023, 1, 1))
+    # end = BERLIN_TZ.localize(datetime(2023, 1, 1))
+    end = BERLIN_TZ.localize(datetime(2022, 3, 1))
 
     # Calculate total hours (instead of total seconds for finer control)
     total_hours = int((end - start).total_seconds() // 3600)
@@ -78,7 +83,7 @@ def setup_table(cur: cursor):
         raise
 
 
-def generate_and_insert_fake_transactions(cur: cursor, num_transactions: int):
+def generate_and_insert_fake_transactions(cur: cursor, conn: PgConnection, num_transactions: int):
     """Generates and inserts fake transactions into the database."""
     print(f"Generating and inserting {num_transactions:,} fake transactions...")
     count = 0
@@ -107,31 +112,146 @@ def generate_and_insert_fake_transactions(cur: cursor, num_transactions: int):
             side = random.choice(['BUY', 'SELL'])
             product = random.choice(['XBID_Hour_Power', 'Intraday_Hour_Power'])
 
-            insert_data.append(
-                (executiontime, deliverystart, deliveryend, price, volume, side, product)
+            # Insert the transaction into the transactions_intraday_de table
+            cur.execute(
+                sql.SQL(
+                    "INSERT INTO transactions_intraday_de (executiontime, deliverystart, deliveryend, price, volume, side, product) VALUES (%s, %s, %s, %s, %s, %s, %s);"),
+                [executiontime, deliverystart, deliveryend, price, volume, side, product]
             )
             count += 1
-            if count >= num_transactions:
-                break
 
-    # Execute the batched inserts
-    insert_query = sql.SQL(
-        "INSERT INTO transactions_intraday_de (executiontime, deliverystart, deliveryend, price, volume, side, product) VALUES (%s, %s, %s, %s, %s, %s, %s);")
-    cur.executemany(insert_query, insert_data)
+        # Commit the transaction
+        conn.commit()
 
     print(f"{num_transactions:,} fake transactions inserted successfully!")
 
-
-def load_external_data(cur: cursor, file_path: str):
+def load_external_data(cur: cursor, file_path: str, table_name: str = 'transactions_intraday_de'):
     """
-    Placeholder function to load external data (e.g., from CSV or JSON) into the DB.
+    Loads data from an external CSV file into the specified PostgreSQL table
+    using a row-by-row INSERT loop (suitable for small datasets).
 
-    NOTE: This would require specific implementation based on the external file format.
+    Args:
+        cur (PgCursor): Open database cursor object.
+        file_path (str): Path to the external CSV file.
+        table_name (str): The name of the target database table.
     """
     print(f"Loading data from external file: {file_path}...")
 
-    profits = pd.read_csv(file_path)
-    # # Preprocess and insert data...
+    # 1. Read the CSV file into a Pandas DataFrame
+    try:
+        df = pd.read_csv(file_path)
+    except FileNotFoundError:
+        print(f"Error: File not found at path: {file_path}")
+        return
 
-    # For now, we print a confirmation and skip actual insertion
-    print("External data loading functionality is a placeholder and was skipped.")
+    # 2. Preprocessing and Type Conversion (CRITICAL)
+    BERLIN_TZ = pytz.timezone('Europe/Berlin')
+
+    try:
+        # Convert necessary columns to timezone-aware datetime objects
+        datetime_cols = ['executiontime', 'deliverystart', 'deliveryend']
+        for col in datetime_cols:
+            # Assume data is in the local timezone or convert it correctly
+            df[col] = pd.to_datetime(df[col], utc=True).dt.tz_convert(BERLIN_TZ)
+
+        # Ensure price and volume are numeric
+        df['price'] = pd.to_numeric(df['price'])
+        df['volume'] = pd.to_numeric(df['volume'])
+
+    except Exception as e:
+        print(f"Error during data type preprocessing. Check CSV format: {e}")
+        return
+
+    # Define the order of columns to align with the database schema
+    columns_to_insert = [
+        'executiontime',
+        'deliverystart',
+        'deliveryend',
+        'price',
+        'volume',
+        'side',
+        'product'
+    ]
+
+    # Select and reorder columns
+    df_clean = df[columns_to_insert]
+
+    # 3. Execute the Row-by-Row INSERT Loop
+
+    insert_count = 0
+    # Create the SQL template once using sql.SQL for safety
+    insert_query_template = sql.SQL(
+        "INSERT INTO {} (executiontime, deliverystart, deliveryend, price, volume, side, product) VALUES (%s, %s, %s, %s, %s, %s, %s);"
+    ).format(sql.Identifier(table_name))
+
+    print(f"Starting row-by-row insertion into {table_name}...")
+
+    # Iterate through each row of the clean DataFrame
+    for index, row in df_clean.iterrows():
+        try:
+            # Prepare the values as a tuple
+            values = tuple(row)
+
+            # Execute the query
+            cur.execute(insert_query_template, values)
+            insert_count += 1
+
+        except psycopg2.Error as e:
+            print(f"Error inserting row {index}: {e}")
+            # Continue to the next row or break based on desired error handling
+
+    # Note: The final conn.commit() is still handled by the calling main() function.
+    print(f"✅ Successfully inserted {insert_count} out of {len(df)} rows.")
+
+def get_average_prices(
+        conn: PgConnection,
+        side: str,
+        execution_time_start: pd.Timestamp,
+        execution_time_end: pd.Timestamp,
+        target_delivery_date: pd.Timestamp,
+        min_trades: int = 1
+) -> pd.DataFrame:
+    """
+    Calculates the historical Volume-Weighted Average Price (VWAP) for a
+    specific delivery day based on transactions executed within a historical window.
+    """
+    start_of_day = pd.to_datetime(target_delivery_date) - pd.Timedelta(hours=2)
+
+    # set hour and minute to 0 (europe/berlin time)
+    start_of_day = start_of_day.replace(hour=0, minute=0)
+
+    end_of_day = start_of_day
+
+    end_of_day = end_of_day.replace(hour=23, minute=45)
+    cursor = conn.cursor()
+
+    cursor.execute(f"""
+        SELECT
+        deliverystart,
+        SUM(price*volume)/SUM(volume) AS weighted_avg_price
+        FROM
+        transactions_intraday_de
+        WHERE
+        (executiontime BETWEEN '{execution_time_start}' AND '{execution_time_end}')
+        AND (product ='XBID_Hour_Power' or product = 'Intraday_Hour_Power') 
+        AND side='{side}' 
+        AND deliverystart < '{target_delivery_date}' 
+        AND deliverystart >= '{start_of_day}' 
+        GROUP BY
+        deliverystart
+        HAVING
+        COUNT(*) >= {min_trades};
+        """)
+    result = cursor.fetchall()
+
+    df = pd.DataFrame(result, columns=["product", "price"])
+
+    # set index to product
+    df.set_index("product", inplace=True)
+    print(df)
+
+    # set index to be all 15 minute intervals from start_of_day to end_of_day, filling missing values with NaN
+    df = df.reindex(pd.date_range(start_of_day, end_of_day, freq="60min"))
+
+    return df
+
