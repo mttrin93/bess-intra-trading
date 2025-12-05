@@ -1,6 +1,13 @@
 import pandas as pd
-from bess_intra_trading.utils import get_average_prices
+from bess_intra_trading.utils import get_average_prices, get_net_trades, setup_logger
 from psycopg2.extensions import connection as PgConnection
+import socket
+import getpass
+
+
+hostname = socket.gethostname()
+username = getpass.getuser()
+log = setup_logger()
 
 
 class RollingIntrinsicStrategy:
@@ -36,10 +43,13 @@ class RollingIntrinsicStrategy:
             pd.DataFrame: A log of all trading decisions and BESS states.
         """
         current_soc = initial_soc
-        log = []
 
         current_day = start_date
         while current_day < end_date:
+
+            all_trades = pd.DataFrame(
+                columns=["execution_time", "side", "quantity", "price", "product", "profit"]
+            )
 
             current_day = current_day.replace(hour=0, minute=0, second=0, microsecond=0)
             current_day = current_day + pd.Timedelta(days=1)
@@ -70,9 +80,23 @@ class RollingIntrinsicStrategy:
                     target_delivery_date=trading_end
                 )
 
-                # break
+                net_trades = get_net_trades(all_trades, trading_end)
+
+                if (volume_weighted_average_price_sell["price"].isnull().all() or
+                                        volume_weighted_average_price_buy["price"].isnull().all()):
+                    log.info("No trades in this quarter hour")
+                    execution_time_start = execution_time_end
+                    execution_time_end = execution_time_end + pd.Timedelta(
+                        minutes=self.dt
+                    )
+                    continue
+                else:
+                    pass
+
                 execution_time_start = execution_time_end
-                execution_time_end = execution_time_end + pd.Timedelta(minutes=self.dt)
+                execution_time_end = execution_time_end + pd.Timedelta(
+                    minutes=self.dt
+                )
 
 
         # # Iterate over all possible decision points (index of market_data)
