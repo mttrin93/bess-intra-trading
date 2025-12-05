@@ -24,10 +24,10 @@ def main():
     )
 
     parser.add_argument(
-        '--capacity',
+        '--c-rate',
         type=float,
-        default=10.0,
-        help='BESS capacity [MWh].'
+        default=0.5,
+        help='BESS c-rate.'
     )
 
     parser.add_argument(
@@ -52,21 +52,62 @@ def main():
     )
 
     parser.add_argument(
+        '--max-cycles',
+        type=float,
+        default=1,
+        help='Maximum number of cycles.'
+    )
+
+    parser.add_argument(
+        '--threshold',
+        type=float,
+        default=0,
+        help='threshold.'
+    )
+
+    parser.add_argument(
+        '--threshold-abs-min',
+        type=float,
+        default=0,
+        help='threshold-abs-min.'
+    )
+
+    parser.add_argument(
+        '--discount-rate',
+        type=float,
+        default=0,
+        help='discount-rate.'
+    )
+
+    parser.add_argument(
+        '--min-trades',
+        type=float,
+        default=1,
+        help='Min trades.'
+    )
+
+    parser.add_argument(
         '--db-name',
         default='intradaydb',
         help='PostgreSQL database name.'
     )
 
+
     args = parser.parse_args()
 
     # Setup BESS and Strategy
     bess_params = {
-        'capacity_mwh': args.capacity,
-        'min_soc': args.capacity * 0.1,  # Assuming 10% minimum SoC
-        'max_soc': args.capacity * 0.9,  # Assuming 90% maximum SoC
+        'c_rate': args.c_rate,
+        # 'min_soc': args.capacity * 0.1,  # Assuming 10% minimum SoC
+        # 'max_soc': args.capacity * 0.9,  # Assuming 90% maximum SoC
         'max_power_mw': args.power,
         'efficiency': args.efficiency,
         'time_step_h': 15,  # 15 minutes
+        'max_cycles': args.max_cycles,
+        'threshold': args.threshold,
+        'threshold_abs_min': args.threshold_abs_min,
+        'discount_rate': args.discount_rate,
+        'min_trades': args.min_trades,
     }
 
     strategy = RollingIntrinsicStrategy(bess_params=bess_params)

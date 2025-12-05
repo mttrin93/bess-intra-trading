@@ -1,8 +1,10 @@
 import pandas as pd
 from bess_intra_trading.utils import get_average_prices, get_net_trades, setup_logger
+from bess_intra_trading.model import solve_intrinsic_problem
 from psycopg2.extensions import connection as PgConnection
 import socket
 import getpass
+import os
 
 
 hostname = socket.gethostname()
@@ -42,9 +44,38 @@ class RollingIntrinsicStrategy:
         Returns:
             pd.DataFrame: A log of all trading decisions and BESS states.
         """
-        current_soc = initial_soc
+        # set path as ./ma_results/threshold
+        path = os.path.join(
+            "output",
+            "hourly",
+            "bs"
+            + str(self.dt)
+            + "cr"
+            + str(self.params['c_rate'])
+            + "rto"
+            + str(self.params['efficiency'])
+            + "mc"
+            + str(self.params['max_cycles'])
+            + "mt"
+            + str(self.params['min_trades'])
+        )
+        tradepath = os.path.join(path, "trades")
+
+        profits = pd.DataFrame(columns=["day", "profit", "cycles"])
+
+        # create directory if it doesn't exist
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        if not os.path.exists(tradepath):
+            os.makedirs(tradepath)
 
         current_day = start_date
+        current_cycles = 0
+        net_trades = pd.DataFrame(
+            columns=["sum_buy", "sum_sell", "net_buy", "net_sell", "product"]
+        )
+
         while current_day < end_date:
 
             all_trades = pd.DataFrame(
@@ -63,27 +94,23 @@ class RollingIntrinsicStrategy:
 
             days_left = (end_date - current_day).days
 
-            while execution_time_end < trading_end:
-                volume_weighted_average_price_sell = get_average_prices(
-                    conn=conn,
-                    side='SELL',
-                    execution_time_start=execution_time_start,
-                    execution_time_end=execution_time_end,
-                    target_delivery_date=trading_end
-                )
+            allowed_cycles = self.params['max_cycles'] / 365 + (
+                    (self.params['max_cycles'] / 365 * (365 - days_left)) - current_cycles
+            )
 
-                volume_weighted_average_price_buy = get_average_prices(
+            while execution_time_end < trading_end:
+                volume_weighted_average_price = get_average_prices(
                     conn=conn,
                     side='BUY',
                     execution_time_start=execution_time_start,
                     execution_time_end=execution_time_end,
-                    target_delivery_date=trading_end
+                    target_delivery_date=trading_end,
+                    min_trades=self.params['min_trades'],
                 )
 
                 net_trades = get_net_trades(all_trades, trading_end)
 
-                if (volume_weighted_average_price_sell["price"].isnull().all() or
-                                        volume_weighted_average_price_buy["price"].isnull().all()):
+                if volume_weighted_average_price["price"].isnull().all():
                     log.info("No trades in this quarter hour")
                     execution_time_start = execution_time_end
                     execution_time_end = execution_time_end + pd.Timedelta(
@@ -91,76 +118,87 @@ class RollingIntrinsicStrategy:
                     )
                     continue
                 else:
-                    pass
+                    try:
+                        results, trades, profit = solve_intrinsic_problem(
+                                prices_qh=volume_weighted_average_price,
+                                execution_time=execution_time_start,
+                                cap=1,
+                                c_rate=self.params['c_rate'],
+                                roundtrip_eff=self.params['efficiency'],
+                                max_cycles=allowed_cycles,
+                                threshold=self.params['threshold'],
+                                threshold_abs_min=self.params['threshold_abs_min'],
+                                discount_rate=self.params['discount_rate'],
+                                prev_net_trades=net_trades,
+                        )
+                        # append trades to all_trades using concat
+                        all_trades = pd.concat([all_trades, trades])
+                    except ValueError:
+                        log.info("Error in optimization")
+                        log.info("execution_time_start: {}".format(execution_time_start))
+                        execution_time_start = execution_time_end
+                        execution_time_end = execution_time_start + pd.Timedelta(
+                            minutes=self.dt
+                        )
+                        continue
 
                 execution_time_start = execution_time_end
                 execution_time_end = execution_time_end + pd.Timedelta(
                     minutes=self.dt
                 )
 
+            # calculate daily_profit as sum of all_trades["profit"]
+            daily_profit = all_trades["profit"].sum()
+            current_cycles += net_trades["net_buy"].sum() / 1.0 * self.params['efficiency'] ** 0.5
 
-        # # Iterate over all possible decision points (index of market_data)
-        # for i in range(len(market_data)):
-        #
-        #     # --- 1. Define the Rolling Lookahead Window ---
-        #     # The intrinsic model looks from time 'i' up to i + T_horizon
-        #     lookahead_prices = market_data.iloc[i: i + T_horizon]
-        #
-        #     # If the lookahead window is incomplete, stop trading
-        #     if len(lookahead_prices) < T_horizon:
-        #         break
-        #
-        #     # --- 2. Solve Optimization for the Current Step ---
-        #     results = solve_intrinsic_problem(
-        #         prices=lookahead_prices,
-        #         soc_initial=current_soc,
-        #         bess_params=self.params
-        #     )
-        #
-        #     # Optimal action (Charge: negative MW, Discharge: positive MW)
-        #     action_mw = results['optimal_action_mw']
-        #
-        #     # --- 3. Update BESS State (Only for the first time step, dt) ---
-        #
-        #     # Calculate power flow for the next dt (15 min)
-        #     power_flow = action_mw * self.dt  # Energy traded in MWh
-        #
-        #     # Apply efficiency to the actual action (charging uses 1/eff, discharging uses eff)
-        #     eff = self.params['efficiency']
-        #     if power_flow > 0:  # Discharge (Selling)
-        #         energy_delivered = power_flow
-        #         energy_removed = power_flow / eff
-        #     elif power_flow < 0:  # Charge (Buying)
-        #         energy_delivered = power_flow
-        #         energy_added = power_flow * eff  # power_flow is negative here
-        #         energy_removed = power_flow
-        #     else:
-        #         energy_delivered = 0
-        #         energy_removed = 0
-        #
-        #     # Calculate the revenue generated in this step
-        #     price = lookahead_prices.iloc[0]['bid'] if action_mw > 0 else lookahead_prices.iloc[0]['ask']
-        #     revenue_dt = abs(action_mw) * price * self.dt
-        #
-        #     # Update SoC (Energy in MWh)
-        #     # current_soc += (action_mw * eff) * self.dt if action_mw < 0 else (action_mw / eff) * self.dt
-        #     # A simpler way using the optimized energy change:
-        #     soc_change = (action_mw * eff * self.dt) if action_mw < 0 else (-action_mw / eff * self.dt)
-        #
-        #     # Ensure SoC stays within bounds after update
-        #     next_soc = current_soc + soc_change
-        #
-        #     # Log the step
-        #     log.append({
-        #         'time': market_data.index[i],
-        #         'soc_start_mwh': current_soc,
-        #         'optimal_action_mw': action_mw,
-        #         'soc_end_mwh': np.clip(next_soc, self.params['min_soc'], self.params['max_soc']),
-        #         'revenue_dt': revenue_dt,
-        #         'status': results.get('status', 'Optimal')
-        #     })
-        #
-        #     # Update state for the next iteration
-        #     current_soc = log[-1]['soc_end_mwh']
-        #
-        # return pd.DataFrame(log).set_index('time')
+            # save trades
+            all_trades.to_csv(
+                os.path.join(tradepath,
+                             "trades_" + current_day.strftime("%Y-%m-%d") + ".csv"),
+                index=False,
+            )
+
+            # append daily_profit to profits.csv using concat
+            profits = pd.concat(
+                [
+                    profits,
+                    pd.DataFrame(
+                        [[current_day, daily_profit, current_cycles]],
+                        columns=["day", "profit", "cycles"],
+                    ),
+                ]
+            )
+
+            profits_db = pd.DataFrame(
+                [
+                    [
+                        current_day,
+                        daily_profit,
+                        net_trades["net_buy"].sum() / 1.0 * self.params['efficiency'] ** 0.5,
+                    ]
+                ],
+                columns=["day", "profit", "cycles"],
+            )
+
+            # add column threshold, threshold_abs and discount_rate to profits_db
+            profits_db["type_freq"] = "H"
+            profits_db["max_cycles"] = self.params['max_cycles']
+            profits_db["bucket_size"] = self.dt
+            profits_db["rto"] = self.params['efficiency']
+            profits_db["c_rate"] = self.params['c_rate']
+            profits_db["min_trades"] = self.params['min_trades']
+
+            # save profits_db to database
+            # TODO: this should be fixed
+            # profits_db.to_sql(
+            #     "revenues",
+            #     conn_alchemy,
+            #     if_exists="append",
+            #     index=False,
+            # )
+
+            # save profits.csv
+            profits.to_csv(os.path.join(path, "profit.csv"), index=False)
+
+            # set current day to current_day plus 1 day
+            current_day = current_day + pd.Timedelta(days=1) + pd.Timedelta(hours=2)
